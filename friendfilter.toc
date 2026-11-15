@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: Friend Filter
+## Notes: Checkboxes to show friends by WoW Forever ruleset and faction. Leaves EllesmereUI's friends list, groups, and whispers alone.
+## Author: Friend Filter
+## Version: 1.0.0
+## SavedVariables: FriendFilterDB
+## OptionalDeps: EllesmereUI
+## Category: Social
+## AllowLoadGameType: forever, camelot
+## ExcludeLoadGameType: standard, classic
+
+Logic.lua
+FriendFilter.lua
