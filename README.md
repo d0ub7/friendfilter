@@ -15,3 +15,7 @@ Copy this folder into the Forever client's `Interface/AddOns` directory. The fol
 WowUp can install it too. Select the Forever client, choose Install from URL, and paste `https://github.com/d0ub7/friendfilter`.
 
 `/friendfilter` and `/ffilter` print a short reminder. `/friendfilter reset` checks every box.
+
+## License
+
+[MIT](LICENSE).
