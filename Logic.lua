@@ -102,9 +102,22 @@ function FF.FactionKey(info)
     if lower == "horde" or name == _G.FACTION_HORDE then return "horde" end
 end
 
--- Ruleset and faction only apply while the friend is in WoW. Offline friends,
--- the Battle.net app, and other games stay listed even if the last session's
--- faction is still on the account.
+-- WoW Forever's project id. Retail, MoP, and the other clients use a
+-- different one, so a level 90 on Kil'jaeden is not a Forever friend.
+local FOREVER_PROJECT = 18
+
+local function GroupNarrowed(db, group)
+    local bucket = db and db[group]
+    if type(bucket) ~= "table" then return false end
+    for _, on in pairs(bucket) do
+        if on == false then return true end
+    end
+    return false
+end
+
+-- Ruleset and faction only apply while the friend is in WoW. Offline friends
+-- and other games stay listed even if the last session's faction is still on
+-- the account. The Battle.net app has its own checkbox.
 function FF.InWow(info)
     local game = info and info.gameAccountInfo
     if not game then return false end
@@ -117,21 +130,56 @@ function FF.InWow(info)
     return false
 end
 
+function FF.InApp(info)
+    local game = info and info.gameAccountInfo
+    if not game then return false end
+    local online = game.isOnline
+    if FF.IsSecret(online) or not online then return false end
+    local program = FF.Plain(game.clientProgram)
+    if program == "App" or program == "BSAp" then return true end
+    if program and program ~= "" then return false end
+    local rich = FF.Plain(game.richPresence)
+    local area = FF.Plain(game.areaName)
+    local function appText(text)
+        if not text then return false end
+        text = text:lower()
+        return text == "in app" or text == "battle.net" or text == "battlenet"
+    end
+    return appText(rich) or appText(area)
+end
+
+-- true on Forever, false on another WoW client, nil when the client did not
+-- say. A missing project id is not enough on its own to call someone retail.
+function FF.OnForever(info)
+    local game = info and info.gameAccountInfo
+    if not game then return nil end
+    local id = game.wowProjectID
+    if id == nil or FF.IsSecret(id) or type(id) ~= "number" then return nil end
+    local forever = _G.WOW_PROJECT_FOREVER
+    if type(forever) ~= "number" then forever = FOREVER_PROJECT end
+    return id == forever
+end
+
+-- Another WoW client, such as retail. A Forever project id wins. With no
+-- project id, a Forever realm suffix or a ruleset word still counts as
+-- Forever. A plain realm name such as Kil'jaeden does not.
+function FF.OtherWow(info, map)
+    local on = FF.OnForever(info)
+    if on == true then return false end
+    if on == false then return true end
+    if FF.RulesetKey(info, map) then return false end
+    local game = info and info.gameAccountInfo
+    local realm = game and (FF.Plain(game.realmName) or FF.Plain(game.realmDisplayName))
+    if not realm then return false end
+    if FF.RealmSuffix(realm) then return false end
+    map = map or FF.DefaultPresenceMap()
+    if TokenKey(map, realm) then return false end
+    return true
+end
+
 function FF.FilterActive(db)
     if type(db) ~= "table" then return false end
-    local ruleset = db.ruleset
-    if type(ruleset) == "table" then
-        for _, on in pairs(ruleset) do
-            if on == false then return true end
-        end
-    end
-    local faction = db.faction
-    if type(faction) == "table" then
-        for _, on in pairs(faction) do
-            if on == false then return true end
-        end
-    end
-    return false
+    return GroupNarrowed(db, "ruleset") or GroupNarrowed(db, "faction") or GroupNarrowed(db, "presence")
 end
 
 local function Wants(db, group, key)
@@ -140,13 +188,21 @@ local function Wants(db, group, key)
     return bucket[key] ~= false
 end
 
--- A checked box keeps that group. A friend with no ruleset (offline, the
--- Battle.net app, another game) is not in any ruleset, so an unchecked
--- ruleset does not hide them. Same for faction. Both axes apply together.
+-- A checked box keeps that group. Offline friends and friends in another
+-- game stay, since they are not on a Forever ruleset. Friends in a different
+-- WoW client are hidden while any ruleset box is unchecked. The Battle.net
+-- app follows its own box, and a stale faction on that account does not hide
+-- them. Ruleset and faction both apply to Forever friends.
 function FF.Passes(info, db, map)
     if not FF.FilterActive(db) then return true end
     if not info then return true end
+    if FF.InApp(info) then
+        return Wants(db, "presence", "app")
+    end
     if not FF.InWow(info) then return true end
+    if GroupNarrowed(db, "ruleset") and FF.OtherWow(info, map) then
+        return false
+    end
     local ruleset = FF.RulesetKey(info, map)
     if ruleset and not Wants(db, "ruleset", ruleset) then return false end
     local faction = FF.FactionKey(info)

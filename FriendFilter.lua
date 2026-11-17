@@ -1,4 +1,4 @@
--- Checkboxes on the friends list: four rulesets and two factions.
+-- Checkboxes on the friends list: four rulesets, two factions, and the Battle.net app.
 --
 -- EllesmereUI's friends list stays in charge of groups, invites, and whispers.
 -- A whisper breaks if an addon writes the friends list Blizzard builds, so
@@ -29,6 +29,10 @@ local FACTIONS = {
     { key = "horde", label = _G.FACTION_HORDE or "Horde", r = 1, g = 0.35, b = 0.28 },
 }
 
+local PRESENCE = {
+    { key = "app", label = "In App" },
+}
+
 local RULESET_LABEL = {
     normal = RULESETS[1].label,
     pvp = RULESETS[2].label,
@@ -49,6 +53,7 @@ local function DB()
     if type(FriendFilterDB) ~= "table" then FriendFilterDB = {} end
     if type(FriendFilterDB.ruleset) ~= "table" then FriendFilterDB.ruleset = {} end
     if type(FriendFilterDB.faction) ~= "table" then FriendFilterDB.faction = {} end
+    if type(FriendFilterDB.presence) ~= "table" then FriendFilterDB.presence = {} end
     return FriendFilterDB
 end
 
@@ -175,6 +180,7 @@ local function SyncChecks(session)
     end
     sync(session.rulesetBoxes, "ruleset")
     sync(session.factionBoxes, "faction")
+    sync(session.presenceBoxes, "presence")
 end
 
 local function FitHit(box)
@@ -201,6 +207,12 @@ local function LayoutChecks(session)
         box:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 6 + (i - 1) * 118, 4)
         FitHit(box)
     end
+    for i = 1, #session.presenceBoxes do
+        local box = session.presenceBoxes[i]
+        box:ClearAllPoints()
+        box:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 6 + (#FACTIONS + i - 1) * 118, 4)
+        FitHit(box)
+    end
 end
 
 local function MakeCheck(parent, entry, group)
@@ -225,17 +237,25 @@ local function MakeCheck(parent, entry, group)
     box:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(entry.label, 1, 1, 1)
-        local which = group == "ruleset" and "ruleset" or "faction"
-        GameTooltip:AddLine("Uncheck to hide friends on this " .. which .. ".", 0.85, 0.85, 0.85, true)
-        GameTooltip:AddLine("Shift-click to show only this one.", 0.7, 0.7, 0.7, true)
+        if group == "presence" then
+            GameTooltip:AddLine("Uncheck to hide friends who are in the Battle.net app.", 0.85, 0.85, 0.85, true)
+        else
+            local which = group == "ruleset" and "ruleset" or "faction"
+            GameTooltip:AddLine("Uncheck to hide friends on this " .. which .. ".", 0.85, 0.85, 0.85, true)
+            GameTooltip:AddLine("Shift-click to show only this one.", 0.7, 0.7, 0.7, true)
+        end
+        if group == "ruleset" then
+            GameTooltip:AddLine("Friends in another version of WoW are hidden while a ruleset is unchecked.", 0.6, 0.6, 0.6, true)
+        end
         GameTooltip:AddLine("Offline friends and friends in another game stay listed.", 0.6, 0.6, 0.6, true)
         GameTooltip:Show()
     end)
     box:SetScript("OnLeave", function() GameTooltip:Hide() end)
     box:SetScript("OnClick", function(self)
         local saved = DB()
-        if IsShiftKeyDown() then
-            local list = group == "ruleset" and RULESETS or FACTIONS
+        local lists = { ruleset = RULESETS, faction = FACTIONS, presence = PRESENCE }
+        if IsShiftKeyDown() and group ~= "presence" then
+            local list = lists[group]
             for i = 1, #list do
                 saved[group][list[i].key] = list[i].key == self.key
             end
@@ -844,7 +864,7 @@ local function BuildOverlay(session)
 
     local empty = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     empty:SetPoint("CENTER", 0, 8)
-    empty:SetText("No friends on the checked rulesets and factions.")
+    empty:SetText("No friends match the checked filters.")
     empty:SetTextColor(0.7, 0.7, 0.7)
     empty:Hide()
 
@@ -903,6 +923,10 @@ local function BuildBar(view, social)
     for i = 1, #FACTIONS do
         factionBoxes[i] = MakeCheck(bar, FACTIONS[i], "faction")
     end
+    local presenceBoxes = {}
+    for i = 1, #PRESENCE do
+        presenceBoxes[i] = MakeCheck(bar, PRESENCE[i], "presence")
+    end
 
     local count = bar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     count:SetPoint("BOTTOMRIGHT", -8, 5)
@@ -915,6 +939,7 @@ local function BuildBar(view, social)
         bar = bar,
         rulesetBoxes = rulesetBoxes,
         factionBoxes = factionBoxes,
+        presenceBoxes = presenceBoxes,
         count = count,
     }
     bar:SetScript("OnSizeChanged", function() LayoutChecks(session) end)
@@ -972,6 +997,7 @@ local function ResetFilters()
     local saved = DB()
     for i = 1, #RULESETS do saved.ruleset[RULESETS[i].key] = true end
     for i = 1, #FACTIONS do saved.faction[FACTIONS[i].key] = true end
+    for i = 1, #PRESENCE do saved.presence[PRESENCE[i].key] = true end
     Apply()
 end
 
@@ -1031,8 +1057,8 @@ SlashCmdList.FRIENDFILTER = function(msg)
     msg = (msg or ""):lower():match("^%s*(.-)%s*$") or ""
     if msg == "reset" then
         ResetFilters()
-        print("|cff33ff99Friend Filter:|r showing every ruleset and faction.")
+        print("|cff33ff99Friend Filter:|r showing every ruleset, faction, and Battle.net app friends.")
         return
     end
-    print("|cff33ff99Friend Filter:|r checkboxes sit on top of the friends window. Uncheck a ruleset or faction to hide it. Shift-click a box to show only that one. /friendfilter reset")
+    print("|cff33ff99Friend Filter:|r checkboxes sit on top of the friends window. Uncheck a ruleset, faction, or In App to hide it. Shift-click a ruleset or faction to show only that one. /friendfilter reset")
 end
