@@ -2,7 +2,7 @@
 ## Title: Friend Filter
 ## Notes: Checkboxes to show friends by WoW Forever ruleset and faction. Leaves EllesmereUI's friends list, groups, and whispers alone.
 ## Author: Friend Filter
-## Version: 1.1.0
+## Version: 1.1.1
 ## SavedVariables: FriendFilterDB
 ## OptionalDeps: EllesmereUI
 ## Category: Social

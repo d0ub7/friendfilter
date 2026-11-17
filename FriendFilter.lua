@@ -47,7 +47,10 @@ local hooked = {}
 local pendingRoute = {}
 local presenceMap
 local refreshHooked
+local searchHooked = {}
+local rereadToken = 0
 local Apply
+local Reread
 
 local function DB()
     if type(FriendFilterDB) ~= "table" then FriendFilterDB = {} end
@@ -265,7 +268,7 @@ local function MakeCheck(parent, entry, group)
         if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then
             PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
         end
-        Apply()
+        Reread()
     end)
     return box
 end
@@ -564,28 +567,33 @@ local function NarrowKeys(view)
     local set = {}
     local bnetType = _G.FRIENDS_BUTTON_TYPE_BNET
     local wowType = _G.FRIENDS_BUTTON_TYPE_WOW
-    local function walk(list)
+    local function mark(kind, id)
+        if id == nil or Logic.IsSecret(id) then return end
+        local keyOk, key = pcall(function() return kind .. ":" .. id end)
+        if keyOk and key then set[key] = true end
+    end
+    local function walk(list, depth)
+        if depth > 4 or type(list) ~= "table" then return end
         for i = 1, #list do
             local node = list[i]
             local data = NodeData(node)
-            local function mark(kind, id)
-                if id == nil or Logic.IsSecret(id) then return end
-                local keyOk, key = pcall(function() return kind .. ":" .. id end)
-                if keyOk and key then set[key] = true end
-            end
             if data and not Logic.IsSecret(data.friendIndex) and data.friendIndex ~= nil then
                 mark("bnet", data.friendIndex)
             elseif data and not Logic.IsSecret(data.id) and data.id ~= nil and bnetType and data.buttonType == bnetType then
                 mark("bnet", data.id)
             elseif data and not Logic.IsSecret(data.id) and data.id ~= nil and wowType and data.buttonType == wowType then
                 mark("wow", data.id)
-            elseif type(node) == "table" and type(node.GetNodes) == "function" then
+            end
+            -- A section still holds its friends when the header is collapsed.
+            if type(node) == "table" and type(node.GetNodes) == "function" then
                 local kidsOk, kids = pcall(node.GetNodes, node)
-                if kidsOk and type(kids) == "table" then walk(kids) end
+                if kidsOk and type(kids) == "table" and #kids > 0 then
+                    walk(kids, depth + 1)
+                end
             end
         end
     end
-    walk(nodes)
+    walk(nodes, 1)
     return set
 end
 
@@ -975,6 +983,39 @@ local function HookCustomRefresh()
     end)
 end
 
+-- Blizzard's Filter menu fills its list after the click, then again when the
+-- search returns. Reading once on our click can miss that. This reads now,
+-- on the next frame, and once more shortly after. It never calls Blizzard's
+-- search. It only reads the list Blizzard already built.
+function Reread()
+    rereadToken = rereadToken + 1
+    local token = rereadToken
+    Apply()
+    if not (C_Timer and C_Timer.After) then return end
+    C_Timer.After(0, function()
+        if token ~= rereadToken then return end
+        Apply()
+    end)
+    C_Timer.After(0.25, function()
+        if token ~= rereadToken then return end
+        Apply()
+    end)
+end
+
+local function HookBlizzardSearch(view)
+    if searchHooked[view] or not hooksecurefunc then return end
+    if type(view.RefreshSearchResults) ~= "function" then return end
+    searchHooked[view] = true
+    hooksecurefunc(view, "RefreshSearchResults", function()
+        if not Active() then return end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, Apply)
+        else
+            Apply()
+        end
+    end)
+end
+
 local function Attach(view, social)
     if not view or attached[view] or not view.ScrollBox then return end
     attached[view] = true
@@ -982,6 +1023,7 @@ local function Attach(view, social)
     BuildOverlay(session)
     sessions[#sessions + 1] = session
     HookCustomRefresh()
+    HookBlizzardSearch(view)
 end
 
 function Apply()
@@ -998,7 +1040,7 @@ local function ResetFilters()
     for i = 1, #RULESETS do saved.ruleset[RULESETS[i].key] = true end
     for i = 1, #FACTIONS do saved.faction[FACTIONS[i].key] = true end
     for i = 1, #PRESENCE do saved.presence[PRESENCE[i].key] = true end
-    Apply()
+    Reread()
 end
 
 local function TryAttachAll()

@@ -6,7 +6,7 @@ The boxes sit in a strip along the top of the friends window. If the window is a
 
 Friends on retail or another version of WoW are hidden while any ruleset box is unchecked. They are not on a Forever ruleset. Offline friends, and friends in a game other than WoW, stay listed.
 
-While a box is unchecked, a filtered list covers the friends window. Right-click a friend for the usual menu. Check every box again, or run `/friendfilter reset`, and EllesmereUI's groups and invites come back. The addon does not rebuild Blizzard's list, so whispers stay on Blizzard's link.
+While a box is unchecked, a filtered list covers the friends window. Blizzard's search box and Filter menu still apply on top of that. Clicking one of these checkboxes reads Blizzard's list again, including just after the Filter menu updates it. Right-click a friend for the usual menu. Check every box again, or run `/friendfilter reset`, and EllesmereUI's groups and invites come back. The addon does not rebuild Blizzard's list, so whispers stay on Blizzard's link.
 
 ## Install
 
