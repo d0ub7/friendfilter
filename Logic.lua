@@ -76,13 +76,24 @@ function FF.RulesetKey(info, map)
         return SUFFIX_KEY[suffix]
     end
 
+    -- "Act III - Normal" is a Diablo difficulty, not a Forever ruleset.
+    -- Only a Forever presence line, or a WoW zone line, counts.
+    if FF.NonWowClient(info) then return nil end
+
     local rich = FF.Plain(game.richPresence)
     if rich then
-        local middle = rich:match("^.- %- (.-) %- ") or rich:match("^.- %- (.+)$")
-        local key = TokenKey(map, middle) or TokenKey(map, rich)
-        if key then return key end
+        local body = rich:match("^[Ff]orever%s*%-%s*(.+)$")
+        if body then
+            local middle = body:match("^(.-)%s*%-%s*") or body
+            local key = TokenKey(map, middle) or TokenKey(map, body)
+            if key then return key end
+        elseif FF.InWow(info) then
+            local key = TokenKey(map, rich)
+            if key then return key end
+        end
     end
 
+    if not FF.InWow(info) then return nil end
     local area = FF.Plain(game.areaName)
     if area then
         local tail = area:match("%-%s*([^%-]+)$")
@@ -115,14 +126,51 @@ local function GroupNarrowed(db, group)
     return false
 end
 
+-- Diablo, Heroes of the Storm, and the other Battle.net games. Their status
+-- text is not a Forever ruleset, and a WoW faction left on the account is
+-- not a reason to hide them.
+function FF.LooksLikeOtherGame(game)
+    local function text(value)
+        value = FF.Plain(value)
+        if not value then return false end
+        value = value:lower()
+        if value:find("playing", 1, true) then return true end
+        if value:find("diablo", 1, true) then return true end
+        if value:find("act %d") or value:find("^act ") or value:find(" act ") then return true end
+        if value:find("starcraft", 1, true) then return true end
+        if value:find("overwatch", 1, true) then return true end
+        if value:find("hearthstone", 1, true) then return true end
+        if value:find("heroes of the storm", 1, true) then return true end
+        if value:find("warcraft iii", 1, true) or value:find("warcraft 3", 1, true) then return true end
+        if value:find("aram", 1, true) then return true end
+        return false
+    end
+    return text(game and game.richPresence) or text(game and game.areaName)
+end
+
+function FF.NonWowClient(info)
+    local game = info and info.gameAccountInfo
+    if not game then return false end
+    local online = game.isOnline
+    if FF.IsSecret(online) or not online then return false end
+    if FF.LooksLikeOtherGame(game) then return true end
+    local program = FF.Plain(game.clientProgram)
+    if not program or program == "" then return false end
+    if program == "WoW" then return false end
+    if _G.BNET_CLIENT_WOW and program == _G.BNET_CLIENT_WOW then return false end
+    if program == "App" or program == "BSAp" then return false end
+    return true
+end
+
 -- Ruleset and faction only apply while the friend is in WoW. Offline friends
--- and other games stay listed even if the last session's faction is still on
--- the account. The Battle.net app has its own checkbox.
+-- stay listed even if the last session's faction is still on the account.
+-- The Battle.net app has its own checkbox.
 function FF.InWow(info)
     local game = info and info.gameAccountInfo
     if not game then return false end
     local online = game.isOnline
     if FF.IsSecret(online) or not online then return false end
+    if FF.NonWowClient(info) then return false end
     local program = FF.Plain(game.clientProgram)
     if not program or program == "" then return true end
     if program == "WoW" then return true end
@@ -177,6 +225,21 @@ function FF.OtherWow(info, map)
     return true
 end
 
+-- "some" while the user still has a ruleset checked and another unchecked.
+-- "none" when every ruleset box is off. "all" when none are off.
+function FF.RulesetMode(db)
+    local bucket = db and db.ruleset
+    if type(bucket) ~= "table" then return "all" end
+    local keys = { "normal", "pvp", "rp", "rppvp" }
+    local off, on = false, false
+    for i = 1, #keys do
+        if bucket[keys[i]] == false then off = true else on = true end
+    end
+    if off and on then return "some" end
+    if off then return "none" end
+    return "all"
+end
+
 function FF.FilterActive(db)
     if type(db) ~= "table" then return false end
     return GroupNarrowed(db, "ruleset") or GroupNarrowed(db, "faction") or GroupNarrowed(db, "presence")
@@ -188,16 +251,21 @@ local function Wants(db, group, key)
     return bucket[key] ~= false
 end
 
--- A checked box keeps that group. Offline friends and friends in another
--- game stay, since they are not on a Forever ruleset. Friends in a different
--- WoW client are hidden while any ruleset box is unchecked. The Battle.net
--- app follows its own box, and a stale faction on that account does not hide
--- them. Ruleset and faction both apply to Forever friends.
+-- A checked box keeps that group. Friends in Diablo, Heroes, and other
+-- Battle.net games are hidden while a ruleset box is still checked, because
+-- they are not on that ruleset. Unchecking every ruleset leaves them listed,
+-- and a WoW faction saved on the account does not hide them. Retail WoW is
+-- hidden while any ruleset box is unchecked. The Battle.net app follows its
+-- own box. Ruleset and faction both apply to Forever friends.
 function FF.Passes(info, db, map)
     if not FF.FilterActive(db) then return true end
     if not info then return true end
     if FF.InApp(info) then
         return Wants(db, "presence", "app")
+    end
+    if FF.NonWowClient(info) then
+        if FF.RulesetMode(db) == "some" then return false end
+        return true
     end
     if not FF.InWow(info) then return true end
     if GroupNarrowed(db, "ruleset") and FF.OtherWow(info, map) then

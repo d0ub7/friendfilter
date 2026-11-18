@@ -249,8 +249,9 @@ local function MakeCheck(parent, entry, group)
         end
         if group == "ruleset" then
             GameTooltip:AddLine("Friends in another version of WoW are hidden while a ruleset is unchecked.", 0.6, 0.6, 0.6, true)
+            GameTooltip:AddLine("Diablo, Heroes, and other games are hidden while a ruleset stays checked.", 0.6, 0.6, 0.6, true)
         end
-        GameTooltip:AddLine("Offline friends and friends in another game stay listed.", 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine("Offline friends stay listed. Other games return when every ruleset box is off.", 0.6, 0.6, 0.6, true)
         GameTooltip:Show()
     end)
     box:SetScript("OnLeave", function() GameTooltip:Hide() end)
