@@ -51,6 +51,7 @@ local searchHooked = {}
 local rereadToken = 0
 local Apply
 local Reread
+local ResetFilters
 
 local function DB()
     if type(FriendFilterDB) ~= "table" then FriendFilterDB = {} end
@@ -197,7 +198,8 @@ local function LayoutChecks(session)
     local bar = session.bar
     local width = bar:GetWidth() or 0
     if width < 20 then return end
-    local slot = width / #RULESETS
+    local reserve = session.reset and 70 or 0
+    local slot = (width - reserve) / #RULESETS
     for i = 1, #session.rulesetBoxes do
         local box = session.rulesetBoxes[i]
         box:ClearAllPoints()
@@ -215,6 +217,10 @@ local function LayoutChecks(session)
         box:ClearAllPoints()
         box:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 6 + (#FACTIONS + i - 1) * 118, 4)
         FitHit(box)
+    end
+    if session.reset then
+        session.reset:ClearAllPoints()
+        session.reset:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -8, -3)
     end
 end
 
@@ -272,6 +278,36 @@ local function MakeCheck(parent, entry, group)
         Reread()
     end)
     return box
+end
+
+local function MakeReset(parent)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(46, 16)
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    label:SetAllPoints()
+    label:SetJustifyH("RIGHT")
+    label:SetText("Reset")
+    label:SetTextColor(0.9, 0.82, 0.55)
+    button.label = label
+
+    button:SetScript("OnEnter", function(self)
+        self.label:SetTextColor(1, 0.95, 0.75)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Reset", 1, 1, 1)
+        GameTooltip:AddLine("Check every box and show the full friends list.", 0.85, 0.85, 0.85, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(self)
+        self.label:SetTextColor(0.9, 0.82, 0.55)
+        GameTooltip:Hide()
+    end)
+    button:SetScript("OnClick", function()
+        if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+        end
+        ResetFilters()
+    end)
+    return button
 end
 
 -- A secret value errors if Lua tests it, so the secret check has to come first.
@@ -949,6 +985,7 @@ local function BuildBar(view, social)
         rulesetBoxes = rulesetBoxes,
         factionBoxes = factionBoxes,
         presenceBoxes = presenceBoxes,
+        reset = MakeReset(bar),
         count = count,
     }
     bar:SetScript("OnSizeChanged", function() LayoutChecks(session) end)
@@ -1036,7 +1073,7 @@ function Apply()
     end
 end
 
-local function ResetFilters()
+function ResetFilters()
     local saved = DB()
     for i = 1, #RULESETS do saved.ruleset[RULESETS[i].key] = true end
     for i = 1, #FACTIONS do saved.faction[FACTIONS[i].key] = true end
